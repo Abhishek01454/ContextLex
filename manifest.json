@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "ContextLex",
+  "version": "1.0.0",
+  "description": "Instantly see word definitions by double-clicking any word on any webpage.",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": []
+}
