@@ -6,7 +6,8 @@
   window.__contextLexLoaded = true;
 
   let tooltip = null;
-  let currentWord = null;
+  let currentText = null;
+  let isMouseDown = false;
 
   // Create tooltip element
   function createTooltip() {
@@ -25,15 +26,22 @@
       tooltip.remove();
       tooltip = null;
     }
-    currentWord = null;
+    currentText = null;
   }
 
-  // Validate that selection is a single word
-  function isValidWord(text) {
-    if (!text || text.length === 0 || text.length > 50) return false;
-    // Must be alphabetic characters only (supports accented characters)
-    const wordPattern = /^[a-zA-ZÀ-ÿ'-]+$/;
-    return wordPattern.test(text);
+  // Validate that selection is valid text (single word or phrase)
+  function isValidText(text) {
+    if (!text || text.length === 0 || text.length > 100) return false;
+
+    // Allow letters, spaces, hyphens, and apostrophes
+    // This supports single words and multi-word phrases
+    const textPattern = /^[a-zA-ZÀ-ÿ'-]+(\s+[a-zA-ZÀ-ÿ'-]+)*$/;
+    return textPattern.test(text);
+  }
+
+  // Check if text is a single word
+  function isSingleWord(text) {
+    return text && !/\s/.test(text.trim());
   }
 
   // Position tooltip near selection
@@ -118,6 +126,38 @@
     }
   }
 
+  // Fetch phrase meaning using Datamuse API for related words/concepts
+  async function fetchPhraseInfo(phrase) {
+    // For phrases, try to provide a combined meaning
+    const words = phrase.split(/\s+/);
+
+    // Try to fetch definitions for individual words in the phrase
+    const definitions = [];
+    for (const word of words.slice(0, 3)) {
+      // Limit to first 3 words
+      const def = await fetchDefinition(word);
+      if (def) {
+        definitions.push(def);
+      }
+    }
+
+    if (definitions.length === 0) {
+      return null;
+    }
+
+    // Combine definitions into a phrase explanation
+    return {
+      word: phrase,
+      phonetic: null,
+      isPhrase: true,
+      meanings: definitions.map((d) => ({
+        partOfSpeech: `${d.word} (${d.meanings[0]?.partOfSpeech || "word"})`,
+        definition: d.meanings[0]?.definition || "",
+        example: d.meanings[0]?.example || null,
+      })),
+    };
+  }
+
   // Render tooltip content
   function renderTooltip(data) {
     if (!tooltip) return;
@@ -130,6 +170,9 @@
     let html = `<div class="contextlex-word">${escapeHtml(data.word)}`;
     if (data.phonetic) {
       html += ` <span class="contextlex-phonetic">${escapeHtml(data.phonetic)}</span>`;
+    }
+    if (data.isPhrase) {
+      html += ` <span class="contextlex-phrase-tag">phrase</span>`;
     }
     html += `</div>`;
 
@@ -164,29 +207,60 @@
     positionTooltip(selection);
   }
 
-  // Handle word selection
+  // Main handler for text selection
   async function handleSelection() {
     const selection = window.getSelection();
     const text = selection ? selection.toString().trim() : "";
 
-    // Ignore if same word or invalid
-    if (!text || text === currentWord || !isValidWord(text)) {
+    // Ignore if same text or invalid
+    if (!text || text === currentText || !isValidText(text)) {
       return;
     }
 
-    currentWord = text;
+    currentText = text;
     showLoading(selection);
 
-    const definition = await fetchDefinition(text);
+    let definition = null;
 
-    // Check if word changed during fetch
-    if (text !== currentWord) return;
+    if (isSingleWord(text)) {
+      // Single word - fetch from dictionary API
+      definition = await fetchDefinition(text);
+    } else {
+      // Multi-word phrase - get combined definitions
+      definition = await fetchPhraseInfo(text);
+    }
+
+    // Check if text changed during fetch
+    if (text !== currentText) return;
 
     renderTooltip(definition);
     positionTooltip(selection);
   }
 
-  // Event listeners
+  // Track mouse state for selection detection
+  document.addEventListener("mousedown", () => {
+    isMouseDown = true;
+  });
+
+  // Handle text selection on mouseup (for click-and-drag selections)
+  document.addEventListener("mouseup", (e) => {
+    isMouseDown = false;
+
+    // Ignore clicks on tooltip itself
+    if (tooltip && tooltip.contains(e.target)) return;
+
+    // Small delay to let selection complete
+    setTimeout(() => {
+      const selection = window.getSelection();
+      const text = selection ? selection.toString().trim() : "";
+
+      if (text && text !== currentText && isValidText(text)) {
+        handleSelection();
+      }
+    }, 50);
+  });
+
+  // Keep double-click for single word selection
   document.addEventListener("dblclick", (e) => {
     // Ignore clicks on tooltip itself
     if (tooltip && tooltip.contains(e.target)) return;
@@ -202,18 +276,24 @@
     if (selectionTimeout) clearTimeout(selectionTimeout);
 
     selectionTimeout = setTimeout(() => {
+      // Don't trigger during mouse drag
+      if (isMouseDown) return;
+
       const selection = window.getSelection();
       const text = selection ? selection.toString().trim() : "";
 
-      // Only trigger if it looks like a deliberate word selection
-      if (text && text !== currentWord && isValidWord(text)) {
+      // Only trigger if it looks like a deliberate selection
+      if (text && text !== currentText && isValidText(text)) {
         handleSelection();
       }
-    }, 300);
+    }, 400);
   });
 
   // Dismiss tooltip on click outside
   document.addEventListener("click", (e) => {
+    // Don't dismiss if clicking to make a selection
+    if (window.getSelection().toString().trim()) return;
+
     if (tooltip && !tooltip.contains(e.target)) {
       hideTooltip();
     }

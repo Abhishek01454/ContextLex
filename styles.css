@@ -41,6 +41,20 @@
     margin-left: 6px;
 }
 
+.contextlex-phrase-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 500;
+    color: #ffffff;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    vertical-align: middle;
+}
+
 .contextlex-meanings {
     display: block;
 }
@@ -121,6 +135,10 @@
     .contextlex-pos {
         color: #c0c0c0;
         background: #3a3a3a;
+    }
+
+    .contextlex-phrase-tag {
+        background: linear-gradient(135deg, #5a6edb 0%, #6b4095 100%);
     }
 
     .contextlex-def {
